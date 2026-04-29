@@ -9,3 +9,5 @@ data/raw/
 *.ckpt
 *.safetensors
 *.log
+
+external/
