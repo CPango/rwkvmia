@@ -1,0 +1,19 @@
+name: rwkvmia
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - scikit-learn
+  - tqdm
+  - pip:
+      - torch
+      - transformers
+      - datasets
+      - accelerate
+      - peft
+      - huggingface_hub
+      - sentencepiece
+      - protobuf
