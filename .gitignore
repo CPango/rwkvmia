@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+checkpoints/
+features/
+results/
+data/raw/
+*.pt
+*.bin
+*.ckpt
+*.safetensors
+*.log
