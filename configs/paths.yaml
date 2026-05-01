@@ -1,0 +1,20 @@
+project:
+  name: rwkvmia
+
+data:
+  raw_dir: data/raw
+  raw_tofu_dir: data/raw/tofu
+  interim_dir: data/interim
+  processed_dir: data/processed
+  processed_tofu_dir: data/processed/tofu
+
+results:
+  root_dir: results
+  logs_dir: results/logs
+  tables_dir: results/tables
+  figures_dir: results/figures
+  predictions_dir: results/predictions
+
+artifacts:
+  checkpoints_dir: checkpoints
+  feature_cache_dir: features

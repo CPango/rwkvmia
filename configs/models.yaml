@@ -1,0 +1,25 @@
+defaults:
+  smoke_prompt: "Hello, this is a remote smoke test for causal language models."
+  max_new_tokens: 20
+  trust_remote_code: false
+  torch_dtype_gpu: float16
+  torch_dtype_cpu: float32
+
+models:
+  gptneo_1p3b:
+    model_id: EleutherAI/gpt-neo-1.3B
+    family: gpt_neo
+    model_type: transformer_causal_lm
+    loader: transformers.AutoModelForCausalLM
+    tokenizer: transformers.AutoTokenizer
+    trust_remote_code: false
+    notes: "Transformer baseline for static loss/perplexity and drift comparisons."
+
+  rwkv4_169m_pile:
+    model_id: RWKV/rwkv-4-169m-pile
+    family: rwkv
+    model_type: rwkv_causal_lm
+    loader: transformers.AutoModelForCausalLM
+    tokenizer: transformers.AutoTokenizer
+    trust_remote_code: false
+    notes: "RWKV baseline; smoke test reports any returned recurrent state."
