@@ -1,103 +1,111 @@
-"""Prepare a minimal author-level TOFU split for remote experiments.
-
-This script downloads/loads the small TOFU dataset through Hugging Face
-datasets on the remote server, normalizes examples, and writes JSONL files
-under data/processed/tofu. It does not train models or create feature caches.
-"""
-
-from __future__ import annotations
-
-import argparse
+import os
 import json
-import sys
+import random
 from pathlib import Path
-from typing import Any
+from collections import defaultdict
+from tqdm import tqdm
+from transformers import AutoTokenizer
+import datasets
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# ------------------------------------------------------
+# 请根据你的目录结构调整
+RAW_DATA_DIR = Path("data/raw")
+OUTPUT_DATA_DIR = Path("data/processed/tofu")
+MODEL_NAME_OR_PATH = "EleutherAI/gpt-neo-1.3B"  # 同 smoke test
+SPLIT_RATIOS = (0.7, 0.15, 0.15)                # train/val/test
+# ------------------------------------------------------
 
-from src.data.tofu import load_tofu_dataset, normalize_tofu_records, split_by_author, write_jsonl
-from src.utils.config import load_paths_config, resolve_repo_path
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prepare minimal TOFU JSONL splits.")
-    parser.add_argument("--dataset", default="locuslab/TOFU", help="Hugging Face dataset name.")
-    parser.add_argument("--subset", default="full", help="TOFU subset/config name.")
-    parser.add_argument("--split", default="train", help="Dataset split to load.")
-    parser.add_argument("--output-dir", default=None, help="Override processed TOFU output directory.")
-    parser.add_argument("--member-fraction", type=float, default=0.5)
-    parser.add_argument("--eval-fraction", type=float, default=0.2)
-    parser.add_argument(
-        "--records-per-author-fallback",
-        type=int,
-        default=20,
-        help="Fallback for TOFU subsets without an explicit author field.",
-    )
-    parser.add_argument("--seed", type=int, default=13)
-    return parser.parse_args()
-
-
-def output_dir_from_config(override: str | None) -> Path:
-    if override:
-        return resolve_repo_path(override)
-    paths = load_paths_config()
-    configured = paths.get("data", {}).get("processed_tofu_dir", "data/processed/tofu")
-    return resolve_repo_path(configured)
+def load_user_texts(raw_dir: Path):
+    """
+    遍历 raw data 目录，按 user_id 收集所有文本
+    -- 假定结构是 raw_dir/<user_id>/*.txt
+    """
+    user_texts = defaultdict(list)
+    for user_dir in raw_dir.iterdir():
+        if user_dir.is_dir():
+            user_id = user_dir.name
+            for f in user_dir.glob("*.txt"):
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                if text.strip():
+                    user_texts[user_id].append(text.strip())
+    return user_texts
 
 
-def write_metadata(path: Path, metadata: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(metadata, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
-
-
-def main() -> int:
-    args = parse_args()
-    output_dir = output_dir_from_config(args.output_dir)
-
-    dataset = load_tofu_dataset(args.dataset, subset=args.subset, split=args.split)
-    records = normalize_tofu_records(
-        dataset,
-        records_per_author_fallback=args.records_per_author_fallback,
-    )
-    partitions = split_by_author(
-        records,
-        member_fraction=args.member_fraction,
-        eval_fraction=args.eval_fraction,
-        seed=args.seed,
+def split_users(user_ids, ratios):
+    random.shuffle(user_ids)
+    n = len(user_ids)
+    train_end = int(ratios[0] * n)
+    val_end = train_end + int(ratios[1] * n)
+    return (
+        user_ids[:train_end],
+        user_ids[train_end:val_end],
+        user_ids[val_end:],
     )
 
-    counts = {
-        name: write_jsonl(output_dir / f"{name}.jsonl", partition)
-        for name, partition in partitions.items()
-    }
-    author_counts = {
-        name: len({record["author_id"] for record in partition})
-        for name, partition in partitions.items()
-    }
-    metadata = {
-        "dataset": args.dataset,
-        "subset": args.subset,
-        "source_split": args.split,
-        "seed": args.seed,
-        "member_fraction": args.member_fraction,
-        "eval_fraction": args.eval_fraction,
-        "records_per_author_fallback": args.records_per_author_fallback,
-        "total_records": len(records),
-        "total_authors": len({record["author_id"] for record in records}),
-        "record_counts": counts,
-        "author_counts": author_counts,
-        "outputs": {name: str(output_dir / f"{name}.jsonl") for name in partitions},
-    }
-    write_metadata(output_dir / "metadata.json", metadata)
 
-    print(f"Wrote TOFU processed files to: {output_dir}")
-    print(json.dumps(metadata, indent=2, ensure_ascii=False))
-    return 0
+def prepare_tokenized_dataset(tokenizer, user_texts):
+    """
+    构造 tokenized 数据
+    """
+    data = []
+    for user_id, text_list in tqdm(user_texts.items()):
+        # 合并成一个长字符串
+        big_text = "\n".join(text_list)
+        enc = tokenizer(
+            big_text,
+            truncation=False,
+            return_attention_mask=True,
+        )
+        # 通常 causal LM 训练 labels 与 inputs 相同
+        enc["labels"] = enc["input_ids"].copy()
+        enc["user_id"] = [user_id] * len(enc["input_ids"])
+        data.append(enc)
+    return data
+
+
+def main():
+    # 1. 加载用户文本
+    user_texts = load_user_texts(RAW_DATA_DIR)
+    print(f"user count: {len(user_texts)}")
+
+    if len(user_texts) < 1:
+        raise RuntimeError("没有检测到任何原始用户数据")
+
+    # 2. 划分用户 split
+    user_ids = list(user_texts.keys())
+    train_ids, val_ids, test_ids = split_users(user_ids, SPLIT_RATIOS)
+
+    print("splits:", len(train_ids), len(val_ids), len(test_ids))
+
+    # 3. 按 split 构造 text_list
+    split_mapping = {
+        "train": {uid: user_texts[uid] for uid in train_ids},
+        "validation": {uid: user_texts[uid] for uid in val_ids},
+        "test": {uid: user_texts[uid] for uid in test_ids},
+    }
+
+    # 4. load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME_OR_PATH)
+    if tokenizer.pad_token is None and tokenizer.eos_token is not None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    processed = {}
+    for split, mapped in split_mapping.items():
+        print(f"processing split: {split} ...")
+        data = prepare_tokenized_dataset(tokenizer, mapped)
+
+        # 5. 转成 HF Dataset
+        ds = datasets.Dataset.from_list(data)
+        processed[split] = ds
+
+        # 6. 保存到磁盘
+        outdir = OUTPUT_DATA_DIR / split
+        outdir.mkdir(parents=True, exist_ok=True)
+        ds.save_to_disk(str(outdir))
+        print(f"saved split {split} to {outdir}")
+
+    print("TOFU dataset creation finished")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
