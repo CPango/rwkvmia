@@ -1,0 +1,42 @@
+# configs/rwkv_tofu.yaml
+
+project:
+  name: rwkvmia
+  seed: 42
+
+model:
+  model_name_or_path: RWKV/rwkv-4-169m-pile
+  model_type: rwkv
+  trust_remote_code: false
+  torch_dtype: float16
+  use_fast_tokenizer: true
+
+data:
+  hfds_train_dir: data/processed/tofu/hfds/train
+  hfds_validation_dir: data/processed/tofu/hfds/validation
+  jsonl_train_file: data/processed/tofu/jsonl/train.jsonl
+  jsonl_validation_file: data/processed/tofu/jsonl/validation.jsonl
+  max_length: 256
+
+training:
+  output_dir: outputs/checkpoint_rwkv
+  logging_dir: outputs/logs/rwkv
+  num_train_epochs: 2
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  fp16: true
+  bf16: false
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 100
+  save_total_limit: 2
+  report_to: none
+  gradient_checkpointing: false
+
+output:
+  final_model_dir: outputs/checkpoint_rwkv/final
+  config_copy_path: outputs/checkpoint_rwkv/finetune_config_used.yaml

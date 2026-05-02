@@ -1,0 +1,18 @@
+{
+  "dataset": "locuslab/TOFU",
+  "config": "full",
+  "seed": 42,
+  "author_block_size": 20,
+  "train_ratio": 0.6,
+  "validation_ratio": 0.2,
+  "test_ratio": 0.2,
+  "num_records": 4000,
+  "num_authors": 200,
+  "num_train_authors": 120,
+  "num_validation_authors": 40,
+  "num_test_authors": 40,
+  "member_label_definition": {
+    "1": "samples used for target model fine-tuning",
+    "0": "samples not used for target model fine-tuning"
+  }
+}

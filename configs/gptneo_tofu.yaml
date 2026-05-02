@@ -1,0 +1,42 @@
+# configs/gptneo_tofu.yaml
+
+project:
+  name: rwkvmia
+  seed: 42
+
+model:
+  model_name_or_path: EleutherAI/gpt-neo-1.3B
+  model_type: gptneo
+  trust_remote_code: false
+  torch_dtype: float16
+  use_fast_tokenizer: true
+
+data:
+  hfds_train_dir: data/processed/tofu/hfds/train
+  hfds_validation_dir: data/processed/tofu/hfds/validation
+  jsonl_train_file: data/processed/tofu/jsonl/train.jsonl
+  jsonl_validation_file: data/processed/tofu/jsonl/validation.jsonl
+  max_length: 256
+
+training:
+  output_dir: outputs/checkpoint_gptneo
+  logging_dir: outputs/logs/gptneo
+  num_train_epochs: 2
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  fp16: true
+  bf16: false
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 100
+  save_total_limit: 2
+  report_to: none
+  gradient_checkpointing: true
+
+output:
+  final_model_dir: outputs/checkpoint_gptneo/final
+  config_copy_path: outputs/checkpoint_gptneo/finetune_config_used.yaml
